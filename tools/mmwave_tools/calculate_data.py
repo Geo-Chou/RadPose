@@ -4,8 +4,8 @@ import json
 import glob
 from tqdm import tqdm
 
-data_root = "/workspace/ikmmpose/data_unfiltered/"
-target_data_root = "/workspace/ikmmpose/data/mmwave/"
+data_root = "/workspace/mmpose/data_unfiltered/"
+target_data_root = "/workspace/mmpose/data/sit/"
 sets = ['train', 'val']
 # concatenate all data into one data path list
 data_folders = os.listdir(data_root)

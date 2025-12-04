@@ -3,10 +3,10 @@ import glob
 import shutil
 from tqdm import tqdm
 
-filter_path = '/workspace/ikmmpose/data/val/keypoints_3d'
+filter_path = '/workspace/mmpose/data/sit/val/annotations'
 filters = os.listdir(filter_path)
-original_path = '/workspace/dataproc/data/1761275143824628506/realsense'
-store_path = '/workspace/ikmmpose/realsense'
+original_path = '/workspace/dataproc/data/1764559822514280600/realsense'
+store_path = '/workspace/mmpose/realsense'
 
 for f in tqdm(filters):
     founds = glob.glob(os.path.join(original_path,os.path.splitext(os.path.basename(f))[0]+'*'))

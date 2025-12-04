@@ -1,6 +1,6 @@
-from .pose_head import SimpleRAECNN
+from .pose_head import MmWavePoseHead
 
 
 __all__ = [
-    'SimpleRAECNN'
+    'MmWavePoseHead'
 ]

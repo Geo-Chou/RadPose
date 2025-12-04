@@ -11,8 +11,8 @@ sys.modules['numpy._core'] = np
 import pickle
 
 data_path = '/workspace/dataproc/data/'
-conf_thresh = 0.2
-output_path = '/workspace/ikmmpose/data_unfiltered/'
+conf_thresh = 0.5
+output_path = '/workspace/mmpose/data_unfiltered/'
 
 def get_args():
     parser = argparse.ArgumentParser(description="data preparation selection")
@@ -118,24 +118,37 @@ if __name__ == '__main__':
                 score = np.array(pred["keypoint_scores"])
                 result_dict = dict()
                 keypoints_3d = []
+                keypoints_sp = []
                 for i, (u, v) in enumerate(keypoints):
                     if u < 0 or v < 0 or u >= depth_map.shape[1] or v >= depth_map.shape[0]:
                         keypoints_3d.append([np.nan, np.nan, np.nan, 0.01])
+                        keypoints_sp.append([np.nan, np.nan, np.nan, 0.01])
                         continue
                     Z = depth_map[int(v), int(u)]
                     X, Y, Z = rs.rs2_deproject_pixel_to_point(intr, [u, v], Z)
                     X, Y, Z = X / 1000.0, Y / 1000.0, Z / 1000.0  # convert mm to meters
                     c = score[i]
                     keypoints_3d.append([X, Y, Z, c])
+                    r = np.sqrt(X**2 + Y**2 + Z**2)
+                    az = np.arctan2(Z, X)
+                    el = np.arcsin(Y / r)
+                    keypoints_sp.append([r, az, el, c])
                 result_dict['keypoints_3d'] = keypoints_3d
+                result_dict['keypoints_sp'] = keypoints_sp
                 keypoints_3d = np.array(keypoints_3d)
+                keypoints_sp = np.array(keypoints_sp)
                 mask_conf = keypoints_3d[:, 3] > conf_thresh
                 mask_valid = ~np.isnan(keypoints_3d[:, :3]).any(axis=1)
                 valid_mask = mask_conf & mask_valid
                 pts = keypoints_3d[valid_mask, :3]
+                sps = keypoints_sp[valid_mask, :3]
                 result_dict['keypoints_3d'] = [
                     [None if (isinstance(x, float) and np.isnan(x)) else x for x in row]
                     for row in result_dict['keypoints_3d']
+                ]
+                result_dict['keypoints_sp'] = [
+                    [None if (isinstance(x, float) and np.isnan(x)) else x for x in row]
+                    for row in result_dict['keypoints_sp']
                 ]
                 if pts.shape[0] < 2:
                     result_dict['bbox_3d'] = None
