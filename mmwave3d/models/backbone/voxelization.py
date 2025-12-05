@@ -1,4 +1,5 @@
 import math
+import time
 from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
@@ -6,6 +7,7 @@ import torch.nn.functional as F
 from mmengine.model import BaseDataPreprocessor
 from mmengine.model.utils import stack_batch
 from mmengine.utils import is_seq_of
+from mmengine.logging import MMLogger
 
 from mmwave3d.registry import MODELS
 
@@ -24,6 +26,8 @@ class MmWaveDataPreprocessor(BaseDataPreprocessor):
                  voxel_pool_kernel: Optional[Union[int, Sequence[int]]] = None,
                  voxel_pool_stride: Optional[Union[int, Sequence[int]]] = None,
                  voxel_pool_type: str = 'max',
+                 voxel_downsample_stages: int = 0,
+                 voxel_conv_kernel_size: Union[int, Sequence[int]] = 3,
                  mean: Optional[Sequence[float]] = None,
                  std: Optional[Sequence[float]] = None,
                  pad_size_divisor: int = 1,
@@ -53,6 +57,7 @@ class MmWaveDataPreprocessor(BaseDataPreprocessor):
         self.frame_id_index = frame_id_index
         self.expected_frames = expected_frames
         self.angles_in_degrees = angles_in_degrees
+        self.voxel_downsample_stages = voxel_downsample_stages
         if voxel_pool_kernel is not None:
             if isinstance(voxel_pool_kernel, int):
                 voxel_pool_kernel = (voxel_pool_kernel,) * 3
@@ -67,9 +72,23 @@ class MmWaveDataPreprocessor(BaseDataPreprocessor):
             voxel_pool_type = voxel_pool_type.lower()
             assert voxel_pool_type in ('max', 'avg'), \
                 'voxel_pool_type must be either "max" or "avg"'
+        if self.voxel_downsample_stages > 0:
+            assert voxel_pool_kernel is not None, (
+                'voxel_pool_kernel must be set when voxel_downsample_stages > 0.')
         self.voxel_pool_kernel = voxel_pool_kernel
         self.voxel_pool_stride = voxel_pool_stride
         self.voxel_pool_type = voxel_pool_type
+        if isinstance(voxel_conv_kernel_size, int):
+            voxel_conv_kernel_size = (voxel_conv_kernel_size,) * 3
+        assert len(voxel_conv_kernel_size) == 3, \
+            'voxel_conv_kernel_size must have 3 elements (r, azimuth, elevation).'
+        self.voxel_conv_kernel_size = voxel_conv_kernel_size
+        conv_kernel = torch.ones(
+            (1, 1, *voxel_conv_kernel_size), dtype=torch.float32)
+        conv_kernel /= conv_kernel.numel()
+        self.register_buffer(
+            'voxel_conv_kernel', conv_kernel, persistent=False)
+        self.voxel_conv_padding = tuple(k // 2 for k in voxel_conv_kernel_size)
 
         angle_unit = math.radians if angles_in_degrees else (lambda x: x)
         self.register_buffer(
@@ -129,13 +148,35 @@ class MmWaveDataPreprocessor(BaseDataPreprocessor):
         if 'points' in inputs:
             batch_inputs['points'] = inputs['points']
             if isinstance(inputs['points'], (list, tuple)):
+                # torch.cuda.synchronize()
+                # t_start = time.time()
                 voxel_grids = self._build_voxel_batch(inputs['points'])
-                if self.voxel_pool_kernel is not None:
+                # torch.cuda.synchronize()
+                # voxel_time = time.time() - t_start
+
+                pool_time = 0.0
+                if self.voxel_downsample_stages > 0:
+                    # torch.cuda.synchronize()
+                    # t_pool = time.time()
                     voxel_grids = self._pool_voxel_grids(voxel_grids)
+                    # torch.cuda.synchronize()
+                    # pool_time = time.time() - t_pool
+                # torch.cuda.synchronize()
+                # t_tokens = time.time()
                 batch_inputs['mmwave_voxels'] = voxel_grids
                 tokens, pos = self.build_transformer_tokens(voxel_grids)
                 batch_inputs['mmwave_tokens'] = tokens
                 batch_inputs['mmwave_pos'] = pos
+                # torch.cuda.synchronize()
+                # token_time = time.time() - t_tokens
+
+                # logger = MMLogger.get_current_instance()
+                # if logger is not None:
+                #     logger.info(
+                #         'Voxel timings - build: %.4fs  pool: %.4fs  tokens: %.4fs '
+                #         'shape: %s',
+                #         voxel_time, pool_time, token_time,
+                #         tuple(voxel_grids.shape))
 
         data['inputs'] = batch_inputs
         data.setdefault('data_samples', None)
@@ -305,17 +346,28 @@ class MmWaveDataPreprocessor(BaseDataPreprocessor):
         return voxel_grid
 
     def _pool_voxel_grids(self, voxel_grids: torch.Tensor) -> torch.Tensor:
-        """Downsample voxel grids via pooling to reduce transformer tokens."""
+        """Downsample voxel grids via conv+pool cascades."""
+        if self.voxel_downsample_stages <= 0 or self.voxel_pool_kernel is None:
+            return voxel_grids
         b, f, r, a, e = voxel_grids.shape
         grids = voxel_grids.view(b * f, 1, r, a, e)
         kernel = self.voxel_pool_kernel
         stride = self.voxel_pool_stride
-        if self.voxel_pool_type == 'max':
-            pooled = F.max_pool3d(grids, kernel_size=kernel, stride=stride)
-        else:
-            pooled = F.avg_pool3d(grids, kernel_size=kernel, stride=stride)
-        pooled = pooled.view(b, f, pooled.shape[-3], pooled.shape[-2], pooled.shape[-1])
-        return pooled
+        conv_kernel = self.voxel_conv_kernel.to(
+            device=grids.device, dtype=grids.dtype)
+        padding = self.voxel_conv_padding
+        for _ in range(self.voxel_downsample_stages):
+            grids = F.conv3d(
+                grids,
+                conv_kernel,
+                padding=padding)
+            grids = F.relu(grids)
+            if self.voxel_pool_type == 'max':
+                grids = F.max_pool3d(grids, kernel_size=kernel, stride=stride)
+            else:
+                grids = F.avg_pool3d(grids, kernel_size=kernel, stride=stride)
+        grids = grids.view(b, f, grids.shape[-3], grids.shape[-2], grids.shape[-1])
+        return grids
 
     def build_transformer_tokens(
             self, voxel_batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -355,10 +407,13 @@ class MmWaveDataPreprocessor(BaseDataPreprocessor):
                 'pooling parameters are available to reconcile them.')
         centers = self.voxel_centers.permute(3, 0, 1, 2).unsqueeze(0)
         centers = centers.to(device=device, dtype=dtype)
-        pooled = F.avg_pool3d(
-            centers,
-            kernel_size=self.voxel_pool_kernel,
-            stride=self.voxel_pool_stride)
+        pooled = centers
+        stages = self.voxel_downsample_stages if self.voxel_downsample_stages > 0 else 1
+        for _ in range(stages):
+            pooled = F.avg_pool3d(
+                pooled,
+                kernel_size=self.voxel_pool_kernel,
+                stride=self.voxel_pool_stride)
         pooled = pooled.squeeze(0).permute(1, 2, 3, 0)
         if tuple(pooled.shape[:3]) != shape:
             raise RuntimeError(

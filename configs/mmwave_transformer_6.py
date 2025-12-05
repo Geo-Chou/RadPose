@@ -23,6 +23,7 @@ model = dict(
         voxel_pool_kernel=(2, 3, 3),
         voxel_pool_stride=(2, 3, 3),
         voxel_pool_type='avg',
+        voxel_downsample_stages=2,
         non_blocking=True),
     transformer=dict(
         type='MmWaveTransformerBackbone',
@@ -68,8 +69,8 @@ test_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=4,
-    num_workers=4,
+    batch_size=24,
+    num_workers=6,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -81,8 +82,8 @@ train_dataloader = dict(
         backend_args=backend_args))
 
 val_dataloader = dict(
-    batch_size=4,
-    num_workers=4,
+    batch_size=24,
+    num_workers=6,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -105,24 +106,31 @@ train_cfg = dict(
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
+# optim_wrapper = dict(
+#     type='OptimWrapper',
+#     optimizer=dict(type='AdamW', lr=3e-4, weight_decay=1e-2),
+#     clip_grad=dict(max_norm=5.0, norm_type=2))
+
 optim_wrapper = dict(
-    type='OptimWrapper',
-    optimizer=dict(type='AdamW', lr=3e-4, weight_decay=1e-2),
+    type='AmpOptimWrapper',
+    loss_scale='dynamic',
+    optimizer=dict(type='AdamW', lr=6e-5, weight_decay=1e-2),
     clip_grad=dict(max_norm=5.0, norm_type=2))
+
 
 param_scheduler = [
     dict(
         type='LinearLR',
-        start_factor=0.001,
+        start_factor=0.01,
         by_epoch=False,
         begin=0,
         end=500),
     dict(
         type='MultiStepLR',
         begin=0,
-        end=max_epochs,
-        by_epoch=True,
-        milestones=[30, 45],
+        end=max_epochs*100,
+        by_epoch=False,
+        milestones=[25*100, 40*100],
         gamma=0.1)
 ]
 

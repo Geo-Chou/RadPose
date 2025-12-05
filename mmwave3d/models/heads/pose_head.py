@@ -1,10 +1,11 @@
 from typing import Dict, List, Optional, Tuple
+import time
 
 import torch
 import torch.nn as nn
 
 from mmwave3d.registry import MODELS
-
+from mmengine.logging import MMLogger
 
 @MODELS.register_module()
 class MmWavePoseHead(nn.Module):
@@ -39,6 +40,8 @@ class MmWavePoseHead(nn.Module):
     def forward(self,
                 inputs: Dict[str, torch.Tensor],
                 data_samples: Optional[List] = None) -> Dict[str, torch.Tensor]:
+        # torch.cuda.synchronize()
+        # start_time = time.time()
         feats = inputs['features']  # (B, N, C) from transformer
         pooled = feats.mean(dim=1)
         feat_emb = self.mlp(pooled)
@@ -47,13 +50,34 @@ class MmWavePoseHead(nn.Module):
         scores = torch.sigmoid(self.score_head(feat_emb).view(
             feats.size(0), self.num_person, self.num_joints))
         outputs = dict(keypoints=keypoints, scores=scores)
+        # torch.cuda.synchronize()
+        # head_time = time.time()-start_time
+        # logger = MMLogger.get_current_instance()
+        # if logger is not None:
+        #             logger.info(
+        #                 'head timings - head: %.4fs',
+        #                 head_time)
 
         if data_samples is not None:
+            # torch.cuda.synchronize()
+            # start_time = time.time()
             gt_kpts, mask = self._stack_gt(
                 data_samples, keypoints.device, keypoints.size(0))
+            # torch.cuda.synchronize()
+            # if logger is not None:
+            #         logger.info(
+            #             'head gt timings - gt: %.4fs',
+            #             time.time()-start_time)
+            # torch.cuda.synchronize()
+            # start_time= time.time()
             if gt_kpts is not None:
                 loss_dict = self.loss(keypoints, scores, gt_kpts, mask)
                 outputs.update(loss_dict)
+                # torch.cuda.synchronize()
+                # if logger is not None:
+                #     logger.info(
+                #         'head loss timings - loss: %.4fs',
+                #         time.time()-start_time)
         return outputs
 
     def _stack_gt(self, data_samples: List, device: torch.device,
@@ -104,9 +128,22 @@ class MmWavePoseHead(nn.Module):
     def loss(self, pred_kpts: torch.Tensor, pred_scores: torch.Tensor,
              gt_kpts: torch.Tensor, mask: torch.Tensor) -> Dict[str, torch.Tensor]:
         losses = dict()
+        # torch.cuda.synchronize()
+        # start_time = time.time()
         if self.loss_mpjpe is not None:
             losses['loss_mpjpe'] = self.loss_mpjpe(pred_kpts, gt_kpts, mask)
+            # torch.cuda.synchronize()
+            # mpjpe_t = time.time()
+            # mpjpe_time = mpjpe_t-start_time
         if self.loss_human_count is not None:
             losses['loss_human_count'] = self.loss_human_count(
                 pred_scores, mask.float())
+        #     torch.cuda.synchronize()
+        #     human_t = time.time()
+        #     human_time = human_t-mpjpe_t
+        # logger = MMLogger.get_current_instance()
+        # if logger is not None:
+        #             logger.info(
+        #                 'loss timings - mpjpe: %.4fs.  human: %.4fs',
+        #                 mpjpe_time, human_time)
         return losses

@@ -95,8 +95,10 @@ class HumanCountLoss(nn.Module):
         # Aggregate joint confidences into a per-person probability.
         person_prob = scores.mean(dim=-1)
         gt_person = (gt_mask.sum(dim=-1) >= 1).float()
-        loss = F.binary_cross_entropy(
-            person_prob.clamp(min=1e-6, max=1 - 1e-6),
-            gt_person,
-            reduction=self.reduction)
-        return loss * self.loss_weight
+        prob = person_prob.clamp(min=1e-6, max=1 - 1e-6)
+        with torch.cuda.amp.autocast(enabled=False):
+            loss = F.binary_cross_entropy(
+                prob.to(dtype=torch.float32),
+                gt_person.to(dtype=torch.float32),
+                reduction=self.reduction)
+        return loss.to(dtype=pred_scores.dtype) * self.loss_weight
