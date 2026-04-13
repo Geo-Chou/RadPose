@@ -6,6 +6,13 @@
 
 **This is the official implement of RadPose. (This work has been submit for publication, please check interest confliction)**
 
+## Demo
+<p align="center">
+  <video src="./demo/demo_anonymous.mp4" width="720px" controls>
+    您的浏览器不支持 video 标签。
+  </video>
+</p>
+
 ## Introduction
 Human skeleton estimation under adverse lighting and occlusion conditions remains challenging for camera- and LiDAR-based systems. Although mmWave radars provides robustness to illumination and occlusion, they rely on dedicated hardware and licensed spectrum, limiting scalability.
 In this paper, we present RadPose, a learning-based monostatic integrated sensing and communication (ISAC) framework that enables commodity mmWave communication devices to perform 3D human skeleton estimation. Unlike specialized radars, RadPose leverages monostatic full-duplex operation to extract channel impulse responses (CIRs) directly from standard OFDM communication signals, generating 3D radio point clouds without additional sensing hardware.
@@ -62,7 +69,7 @@ cd RadPose
 cd RadPose
 ./tools/test.py configs/[target config file].py work_dirs/[target checkpoint file].pth
 ```
-To refine the skeleton with inverse kinematic, you may need train the backbone first, like this [config file](https://github.com/Geo-Chou/RadPose/configs/mmwave_heatmap_v2_fpn_query.py). Then, you should transfer the checkpoint into inverse kinematic version in order to refine.
+To refine the skeleton with inverse kinematic, you may need train the backbone first, like this [config file](https://github.com/Geo-Chou/RadPose/blob/main/configs/mmwave_heatmap_v2_fpn_query_aug_physics_stem.py). Then, you should transfer the checkpoint into inverse kinematic version in order to refine.
 ```
 python tools/remap_heatmap_ckpt_to_ik.py [source ckpt path] [target ckpt path]
 ```
