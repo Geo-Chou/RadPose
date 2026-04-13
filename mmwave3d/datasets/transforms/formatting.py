@@ -52,7 +52,8 @@ class Pack3DInputs(BaseTransform):
     def __init__(
         self,
         keys: tuple,
-        meta_keys: tuple = ('num_frames', 'radar_points_paths')
+        meta_keys: tuple = ('num_frames', 'radar_points_paths', 'sample_name',
+                            'points_count_after_temporal_filter')
     ) -> None:
         self.keys = keys
         self.meta_keys = meta_keys
@@ -144,6 +145,8 @@ class Pack3DInputs(BaseTransform):
             #     if key in results['points']:
             #         data_metas[key] = results['points'][key]
         data_sample.set_metainfo(data_metas)
+        if 'sample_name' in data_metas:
+            data_sample.dump_name = data_metas['sample_name']
 
         inputs = {}
         for key in self.keys:

@@ -76,6 +76,13 @@ def main():
     if args.ceph:
         cfg = replace_ceph_backend(cfg)
 
+    custom_imports = cfg.get('custom_imports', None)
+    if custom_imports:
+        from mmengine.utils import import_modules_from_strings
+        imports = custom_imports.get('imports', [])
+        allow_failed = custom_imports.get('allow_failed_imports', False)
+        import_modules_from_strings(imports, allow_failed)
+
     cfg.launcher = args.launcher
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)

@@ -7,6 +7,10 @@ NODE_RANK=${NODE_RANK:-0}
 PORT=${PORT:-29500}
 MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
 
+export NCCL_P2P_DISABLE=1
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=0
+export TORCH_NCCL_BLOCKING_WAIT=1
+
 PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
 python -m torch.distributed.launch \
     --nnodes=$NNODES \
@@ -16,4 +20,5 @@ python -m torch.distributed.launch \
     --master_port=$PORT \
     $(dirname "$0")/train.py \
     $CONFIG \
-    --launcher pytorch ${@:3}
+    --launcher pytorch ${@:3} \
+    # --resume

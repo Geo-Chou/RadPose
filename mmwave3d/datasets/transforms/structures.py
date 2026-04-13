@@ -489,3 +489,16 @@ class MmWaveDataSample(BaseDataElement):
     @eval_ann_info.deleter
     def eval_ann_info(self) -> None:
         del self._eval_ann_info
+
+    @property
+    def dump_name(self) -> Optional[str]:
+        return getattr(self, '_dump_name', None)
+
+    @dump_name.setter
+    def dump_name(self, value: Optional[str]) -> None:
+        self.set_field(value, '_dump_name', dtype=(str, type(None)))
+
+    @dump_name.deleter
+    def dump_name(self) -> None:
+        if hasattr(self, '_dump_name'):
+            del self._dump_name

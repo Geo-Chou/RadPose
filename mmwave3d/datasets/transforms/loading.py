@@ -37,10 +37,14 @@ class LoadMmPointsFromFile(BaseTransform):
                  use_dim: Union[int, List[int]] = [0, 1, 2],
                  use_amplitude: bool = False,
                  use_phase: bool = False,
+                 normalize_amplitude: bool = False,
+                 normalize_phase: bool = False,
                  norm_intensity: bool = False,
                  backend_args: Optional[dict] = None) -> None:
         self.use_phase = use_phase
         self.use_amplitude = use_amplitude
+        self.normalize_amplitude = normalize_amplitude
+        self.normalize_phase = normalize_phase
         if isinstance(use_dim, int):
             use_dim = list(range(use_dim))
         assert max(use_dim) < load_dim, \
@@ -71,6 +75,10 @@ class LoadMmPointsFromFile(BaseTransform):
                 amp = amp[:, None]
             if phase.ndim == 1:
                 phase = phase[:, None]
+            if self.normalize_amplitude:
+                amp = self._normalize_feature(amp)
+            if self.normalize_phase:
+                phase = self._normalize_feature(phase)
             # phase = np.stack((real, imag), axis=-1)
             # print(points_mm.shape, amp.shape, phase.shape)
             points = np.concatenate((points_mm, amp, phase), axis=-1)
@@ -82,6 +90,13 @@ class LoadMmPointsFromFile(BaseTransform):
                 points = np.fromfile(pts_filename, dtype=np.float32)
 
         return points
+    
+    def _normalize_feature(self, values: np.ndarray) -> np.ndarray:
+        """Min-max normalize feature columns independently."""
+        min_val = values.min(axis=0, keepdims=True)
+        max_val = values.max(axis=0, keepdims=True)
+        denom = np.maximum(max_val - min_val, 1e-6)
+        return (values - min_val) / denom
 
     def transform(self, results: dict) -> dict:
         """Method to load points data from file.

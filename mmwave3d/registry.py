@@ -1,11 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
-"""MMDetection3D provides 17 registry nodes to support using modules across
-projects. Each node is a child of the root registry in MMEngine.
-
-More details can be found at
-https://mmengine.readthedocs.io/en/latest/tutorials/registry.html.
-"""
-
 from mmengine.registry import DATA_SAMPLERS as MMENGINE_DATA_SAMPLERS
 from mmengine.registry import DATASETS as MMENGINE_DATASETS
 from mmengine.registry import EVALUATOR as MMENGINE_EVALUATOR
@@ -40,7 +32,7 @@ RUNNER_CONSTRUCTORS = Registry(
 # manage all kinds of loops like `EpochBasedTrainLoop`
 LOOPS = Registry('loop', parent=MMENGINE_LOOPS)
 # manage all kinds of hooks like `CheckpointHook`
-HOOKS = Registry('hook', parent=MMENGINE_HOOKS)
+HOOKS = Registry('hook', parent=MMENGINE_HOOKS, locations=['mmwave3d.hooks'])
 
 # manage data-related modules
 DATASETS = Registry(

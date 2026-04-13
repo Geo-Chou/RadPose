@@ -10,15 +10,18 @@ import shutil
 sys.modules['numpy._core'] = np
 import pickle
 
-data_path = '/workspace/dataproc/data/'
 conf_thresh = 0.5
-output_path = '/workspace/mmpose/data_unfiltered/'
 
 def get_args():
     parser = argparse.ArgumentParser(description="data preparation selection")
 
+    parser.add_argument('--data_path', type=str, required=True, help='Path to the data directory')
+    parser.add_argument('--output_path', type=str, default='/workspace/mmpose/data_unfiltered/', 
+                        help='Path to the output directory')
     parser.add_argument('--data_dirs', type=str, default=None, help='Specify single data directory to process, ' \
     'else will process all directories in data_path')
+    parser.add_argument('--skip_processed', action='store_true', 
+                        help='Skip directories that have already been processed')
     args = parser.parse_args()
     return args
 
@@ -72,101 +75,127 @@ def align_and_clean(radar_dir, gt_dir, out_radar_dir=None, out_gt_dir=None, max_
 
     return matched_pairs
 
+def is_directory_processed(output_path, dir_name):
+    """
+    Check if a directory has already been processed.
+    Returns True if the output directory exists and contains expected files.
+    """
+    output_dir = os.path.join(output_path, dir_name)
+    annotations_dir = os.path.join(output_dir, 'annotations')
+    radar_dir = os.path.join(output_dir, 'radar_points')
+    
+    if not os.path.exists(output_dir):
+        return False
+    
+    # Check if both annotations and radar_points directories exist and contain files
+    has_annotations = os.path.exists(annotations_dir) and len(os.listdir(annotations_dir)) > 0
+    has_radar = os.path.exists(radar_dir) and len(os.listdir(radar_dir)) > 0
+    
+    return has_annotations and has_radar
+
 if __name__ == '__main__':
     args = get_args()
+    data_path = args.data_path
+    output_path = args.output_path
 
     ## process 2D pose estimation
-    inferencer = MMPoseInferencer(pose2d = 'human', show_progress=True)
+    inferencer = MMPoseInferencer(pose2d = 'rtmpose-m_8xb64-210e_mpii-256x256', show_progress=True)
     
     if args.data_dirs is not None:
         data_dirs = [args.data_dirs]
     else:
         data_dirs = [d for d in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, d))]
+    
     for dir in data_dirs:
+        # Check if directory has already been processed
+        if args.skip_processed and is_directory_processed(output_path, dir):
+            print(f'Skipping {dir}: Already processed')
+            print('---------------------------------------')
+            continue
         
         cur_data_path = os.path.join(data_path, dir, 'realsense')
         print(f'Processing data directory: {cur_data_path}')
-        imgs = [os.path.join(cur_data_path, f) for f in os.listdir(cur_data_path) if f.endswith('.png')]
-        print(f'Found {len(imgs)} images to process.')
-        result_generator = inferencer(imgs, pred_out_dir=os.path.join(data_path, dir, 'predictions'), show=False)
-        results = [result for result in result_generator]
+        # imgs = [os.path.join(cur_data_path, f) for f in os.listdir(cur_data_path) if f.endswith('.png')]
+        # print(f'Found {len(imgs)} images to process.')
+        # result_generator = inferencer(imgs, pred_out_dir=os.path.join(data_path, dir, 'predictions'), show=False)
+        # results = [result for result in result_generator]
 
-        intr_data = np.load(os.path.join(data_path,dir,"intrinsics.npz"))
-        # with open(os.path.join(data_path,dir,"intrinsics.npy"), "rb") as f:
-        #      intr_data = pickle.load(f)
-        intr = rs.intrinsics()
-        intr.width = intr_data["width"]
-        intr.height = intr_data["height"]
-        intr.ppx = intr_data["ppx"]
-        intr.ppy = intr_data["ppy"]
-        intr.fx = intr_data["fx"]
-        intr.fy = intr_data["fy"]
-        intr.model = rs.distortion(int(intr_data["model"]))
-        intr.coeffs = intr_data["coeffs"]
+        # intr_data = np.load(os.path.join(data_path,dir,"intrinsics.npz"))
+        # # with open(os.path.join(data_path,dir,"intrinsics.npy"), "rb") as f:
+        # #      intr_data = pickle.load(f)
+        # intr = rs.intrinsics()
+        # intr.width = intr_data["width"]
+        # intr.height = intr_data["height"]
+        # intr.ppx = intr_data["ppx"]
+        # intr.ppy = intr_data["ppy"]
+        # intr.fx = intr_data["fx"]
+        # intr.fy = intr_data["fy"]
+        # intr.model = rs.distortion(int(intr_data["model"]))
+        # intr.coeffs = intr_data["coeffs"]
 
-        ## process depth to 3D points
-        print('Processing depth maps to 3D points...')
-        os.makedirs(os.path.join(data_path, dir, 'annotations'), exist_ok=True)
-        for img in tqdm(imgs):
-            img_name = os.path.basename(img)
-            img_idx = os.path.splitext(img_name)[0]
-            depth_map = np.load(os.path.join(cur_data_path, f'{img_idx}.npy'))
-            pred_data = json.load(open(os.path.join(data_path, dir, 'predictions', f'{img_idx}.json')))
-            result_data = list()
-            for pred in pred_data:
-                keypoints = np.array(pred["keypoints"])
-                score = np.array(pred["keypoint_scores"])
-                result_dict = dict()
-                keypoints_3d = []
-                keypoints_sp = []
-                for i, (u, v) in enumerate(keypoints):
-                    if u < 0 or v < 0 or u >= depth_map.shape[1] or v >= depth_map.shape[0]:
-                        keypoints_3d.append([np.nan, np.nan, np.nan, 0.01])
-                        keypoints_sp.append([np.nan, np.nan, np.nan, 0.01])
-                        continue
-                    Z = depth_map[int(v), int(u)]
-                    X, Y, Z = rs.rs2_deproject_pixel_to_point(intr, [u, v], Z)
-                    X, Y, Z = X / 1000.0, Y / 1000.0, Z / 1000.0  # convert mm to meters
-                    c = score[i]
-                    keypoints_3d.append([X, Y, Z, c])
-                    r = np.sqrt(X**2 + Y**2 + Z**2)
-                    az = np.arctan2(Z, X)
-                    el = np.arcsin(Y / r)
-                    keypoints_sp.append([r, az, el, c])
-                result_dict['keypoints_3d'] = keypoints_3d
-                result_dict['keypoints_sp'] = keypoints_sp
-                keypoints_3d = np.array(keypoints_3d)
-                keypoints_sp = np.array(keypoints_sp)
-                mask_conf = keypoints_3d[:, 3] > conf_thresh
-                mask_valid = ~np.isnan(keypoints_3d[:, :3]).any(axis=1)
-                valid_mask = mask_conf & mask_valid
-                pts = keypoints_3d[valid_mask, :3]
-                sps = keypoints_sp[valid_mask, :3]
-                result_dict['keypoints_3d'] = [
-                    [None if (isinstance(x, float) and np.isnan(x)) else x for x in row]
-                    for row in result_dict['keypoints_3d']
-                ]
-                result_dict['keypoints_sp'] = [
-                    [None if (isinstance(x, float) and np.isnan(x)) else x for x in row]
-                    for row in result_dict['keypoints_sp']
-                ]
-                if pts.shape[0] < 2:
-                    result_dict['bbox_3d'] = None
+        # ## process depth to 3D points
+        # print('Processing depth maps to 3D points...')
+        # os.makedirs(os.path.join(data_path, dir, 'annotations'), exist_ok=True)
+        # for img in tqdm(imgs):
+        #     img_name = os.path.basename(img)
+        #     img_idx = os.path.splitext(img_name)[0]
+        #     depth_map = np.load(os.path.join(cur_data_path, f'{img_idx}.npy'))
+        #     pred_data = json.load(open(os.path.join(data_path, dir, 'predictions', f'{img_idx}.json')))
+        #     result_data = list()
+        #     for pred in pred_data:
+        #         keypoints = np.array(pred["keypoints"])
+        #         score = np.array(pred["keypoint_scores"])
+        #         result_dict = dict()
+        #         keypoints_3d = []
+        #         keypoints_sp = []
+        #         for i, (u, v) in enumerate(keypoints):
+        #             if u < 0 or v < 0 or u >= depth_map.shape[1] or v >= depth_map.shape[0]:
+        #                 keypoints_3d.append([np.nan, np.nan, np.nan, 0.01])
+        #                 keypoints_sp.append([np.nan, np.nan, np.nan, 0.01])
+        #                 continue
+        #             Z = depth_map[int(v), int(u)]
+        #             X, Y, Z = rs.rs2_deproject_pixel_to_point(intr, [u, v], Z)
+        #             X, Y, Z = X / 1000.0, Y / 1000.0, Z / 1000.0  # convert mm to meters
+        #             c = score[i]
+        #             keypoints_3d.append([X, Y, Z, c])
+        #             r = np.sqrt(X**2 + Y**2 + Z**2)
+        #             az = np.arctan2(Z, X)
+        #             el = np.arcsin(Y / r)
+        #             keypoints_sp.append([r, az, el, c])
+        #         result_dict['keypoints_3d'] = keypoints_3d
+        #         result_dict['keypoints_sp'] = keypoints_sp
+        #         keypoints_3d = np.array(keypoints_3d)
+        #         keypoints_sp = np.array(keypoints_sp)
+        #         mask_conf = keypoints_3d[:, 3] > conf_thresh
+        #         mask_valid = ~np.isnan(keypoints_3d[:, :3]).any(axis=1)
+        #         valid_mask = mask_conf & mask_valid
+        #         pts = keypoints_3d[valid_mask, :3]
+        #         sps = keypoints_sp[valid_mask, :3]
+        #         result_dict['keypoints_3d'] = [
+        #             [None if (isinstance(x, float) and np.isnan(x)) else x for x in row]
+        #             for row in result_dict['keypoints_3d']
+        #         ]
+        #         result_dict['keypoints_sp'] = [
+        #             [None if (isinstance(x, float) and np.isnan(x)) else x for x in row]
+        #             for row in result_dict['keypoints_sp']
+        #         ]
+        #         if pts.shape[0] < 2:
+        #             result_dict['bbox_3d'] = None
                     
-                else:
-                    min_xyz = np.min(pts, axis=0)
-                    max_xyz = np.max(pts, axis=0)
-                    mins = np.nanmin(pts, axis=0)
-                    maxs = np.nanmax(pts, axis=0)
-                    margin = 0.8
-                    center = (mins + maxs) / 2.0
-                    size = (maxs - mins) * (1 + margin)  
-                    bbox3d = np.concatenate([center, size])
-                    result_dict['bbox_3d'] = bbox3d.tolist()
-                result_data.append(result_dict)
-            with open(os.path.join(data_path, dir, 'annotations', f'{img_idx}.json'), 'w') as f:
-                json.dump(result_data, f, indent=2, ensure_ascii=False)
-        print(f'Finished processing data directory: {cur_data_path}')
+        #         else:
+        #             min_xyz = np.min(pts, axis=0)
+        #             max_xyz = np.max(pts, axis=0)
+        #             mins = np.nanmin(pts, axis=0)
+        #             maxs = np.nanmax(pts, axis=0)
+        #             margin = 0.8
+        #             center = (mins + maxs) / 2.0
+        #             size = (maxs - mins) * (1 + margin)  
+        #             bbox3d = np.concatenate([center, size])
+        #             result_dict['bbox_3d'] = bbox3d.tolist()
+        #         result_data.append(result_dict)
+        #     with open(os.path.join(data_path, dir, 'annotations', f'{img_idx}.json'), 'w') as f:
+        #         json.dump(result_data, f, indent=2, ensure_ascii=False)
+        # print(f'Finished processing data directory: {cur_data_path}')
         print('---------------------------------------')
         print('Coarse data alignment is processing')
         align_and_clean(
