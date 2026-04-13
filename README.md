@@ -7,10 +7,8 @@
 **This is the official implement of RadPose. (This work has been submit for publication, please check interest confliction)**
 
 ## Demo
-<p align="center">
-  <video src="./demo/demo_anonymous.mp4" width="720px" controls>
-    您的浏览器不支持 video 标签。
-  </video>
+<p align='center'>
+<img src="./demo/demo_anonymous.gif" width="720px">
 </p>
 
 ## Introduction
