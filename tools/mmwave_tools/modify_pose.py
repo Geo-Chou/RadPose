@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 
 DEFAULT_MODEL = 'rtmpose-m_8xb64-210e_mpii-256x256'
-DEFAULT_DATAPROC_ROOT = '/workspace/dataproc/data'
-DEFAULT_MMPOSE_ROOT = '/workspace/mmpose/data'
+DEFAULT_DATAPROC_ROOT = 'data/raw'
+DEFAULT_MMPOSE_ROOT = 'data'
 DEFAULT_PRED_DIRNAME = 'predictions_mpii'
 DEFAULT_CONF_THRESH = 0.5
 

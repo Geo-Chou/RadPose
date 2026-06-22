@@ -316,7 +316,6 @@ class UniformSampling(BaseTransform):
         #       f"(target: {self.num_points_per_frame * len(points_list)} = "
         #       f"{self.num_points_per_frame} × {len(points_list)} frames)")
         
-        # 提取attribute_dims
         attribute_dims = None
         points_dim = 3
         if len(points_list) > 0 and isinstance(points_list[0], RadarPoints):

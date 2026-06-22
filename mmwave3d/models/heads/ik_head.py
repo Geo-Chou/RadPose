@@ -24,7 +24,6 @@ class GraphConv(nn.Module):
             edge_weight: (B, J, J) optional dynamic edge weights based on confidence
         """
         if edge_weight is not None:
-            # 动态加权：每个batch有不同的边权重
             a_norm = a_norm.unsqueeze(0) * edge_weight  # (B, J, J)
             x = torch.einsum('bij,bjf->bif', a_norm, x)
         else:
@@ -44,7 +43,6 @@ class ForwardKinematicsLayer(nn.Module):
         self.num_joints = num_joints
         self.root_index = root_index
         self.parents = list(parents)
-        # 基础骨长（固定）
         self.register_buffer(
             'bone_lengths_base',
             torch.tensor(bone_lengths, dtype=torch.float32),
@@ -83,13 +81,10 @@ class ForwardKinematicsLayer(nn.Module):
         positions = directions.new_zeros((bsz, num_person, num_joints, 3))
         positions[:, :, self.root_index] = root_pos
         
-        # 使用动态骨长或固定骨长
         if bone_length_scales is not None:
-            # 动态骨长：base_length * scale
             lengths = self.bone_lengths_base.to(directions.device).view(1, 1, -1)  # (1, 1, J)
             lengths = lengths * bone_length_scales  # (B, P, J)
         else:
-            # 固定骨长
             lengths = self.bone_lengths_base.to(directions.device)
         
         for j in self.order:
@@ -176,53 +171,45 @@ class IKHead(nn.Module):
         parents, bone_lengths = self._build_skeleton(skeleton_edges, bone_length_means)
         self.parents = parents
         
-        # 基于完整训练集统计的平均骨骼方向（笛卡尔坐标系）
-        # 这与_compute_initial_dirs()的计算方式一致
-        # 统计自57463个训练样本的平均姿态
         default_directions = [
-            [-0.0203,  0.9988,  0.0443],  # 0: 右脚踝(0) <- 右膝(1) (n=57440)
-            [-0.0778,  0.9934, -0.0846],  # 1: 右膝(1) <- 右髋(2) (n=57455)
-            [-0.9512, -0.0645,  0.3018],  # 2: 右髋(2) <- 骨盆(6) (n=56609)
-            [ 0.9106,  0.0037,  0.4133],  # 3: 左髋(3) <- 骨盆(6) (n=56506)
-            [ 0.0921,  0.9922, -0.0838],  # 4: 左膝(4) <- 左髋(3) (n=57456)
-            [ 0.0093,  0.9987,  0.0500],  # 5: 左脚踝(5) <- 左膝(4) (n=57434)
-            [ 0.0000,  1.0000,  0.0000],  # 6: 骨盆(6) (root，无parent)
-            [ 0.0112, -0.9946,  0.1031],  # 7: 脊柱(7) <- 骨盆(6) (n=57463)
-            [ 0.0151, -0.9619,  0.2731],  # 8: 脖子(8) <- 脊柱(7) (n=57230)
-            [ 0.0114, -0.9987,  0.0495],  # 9: 头(9) <- 脖子(8) (n=57463)
-            [ 0.1471,  0.8432, -0.5170],  # 10: 右手腕(10) <- 右肘(11) (n=57431)
-            [-0.1308,  0.9900, -0.0532],  # 11: 右肘(11) <- 右肩(12) (n=57461)
-            [-0.9085, -0.1237,  0.3991],  # 12: 右肩(12) <- 脊柱(7) (n=56703)
-            [ 0.9087, -0.0919,  0.4072],  # 13: 左肩(13) <- 脊柱(7) (n=56601)
-            [ 0.0757,  0.9950, -0.0656],  # 14: 左肘(14) <- 左肩(13) (n=57462)
-            [-0.2322,  0.8992, -0.3709],  # 15: 左手腕(15) <- 左肘(14) (n=57441)
+            [-0.0203,  0.9988,  0.0443],
+            [-0.0778,  0.9934, -0.0846],
+            [-0.9512, -0.0645,  0.3018],
+            [ 0.9106,  0.0037,  0.4133],
+            [ 0.0921,  0.9922, -0.0838],
+            [ 0.0093,  0.9987,  0.0500],
+            [ 0.0000,  1.0000,  0.0000],
+            [ 0.0112, -0.9946,  0.1031],
+            [ 0.0151, -0.9619,  0.2731],
+            [ 0.0114, -0.9987,  0.0495],
+            [ 0.1471,  0.8432, -0.5170],
+            [-0.1308,  0.9900, -0.0532],
+            [-0.9085, -0.1237,  0.3991],
+            [ 0.9087, -0.0919,  0.4072],
+            [ 0.0757,  0.9950, -0.0656],
+            [-0.2322,  0.8992, -0.3709],
         ]
         self.register_buffer('default_dir', torch.tensor(
             default_directions, dtype=torch.float32
         ), persistent=False)
 
-        # FK深度映射：根据FK链中的拓扑距离
-        # 深度越大说明离root越远，误差累积越严重
-        # 关节顺序：[0右脚踝, 1右膝, 2右髋, 3左髋, 4左膝, 5左脚踝,
-        #          6骨盆, 7脊柱, 8脖子, 9头, 10右手腕, 11右肘, 12右肩,
-        #          13左肩, 14左肘, 15左手腕]
         depth_map = torch.tensor([
-            3,  # 0: 右脚踝 (骨盆→右髋→右膝→右脚踝)
-            2,  # 1: 右膝 (骨盆→右髋→右膝)
-            1,  # 2: 右髋 (骨盆→右髋)
-            1,  # 3: 左髋 (骨盆→左髋)
-            2,  # 4: 左膝 (骨盆→左髋→左膝)
-            3,  # 5: 左脚踝 (骨盆→左髋→左膝→左脚踝)
-            0,  # 6: 骨盆 (root)
-            1,  # 7: 脊柱 (骨盆→脊柱)
-            2,  # 8: 脖子 (骨盆→脊柱→脖子)
-            3,  # 9: 头 (骨盆→脊柱→脖子→头)
-            4,  # 10: 右手腕 (骨盆→脊柱→右肩→右肘→右手腕)
-            3,  # 11: 右肘 (骨盆→脊柱→右肩→右肘)
-            2,  # 12: 右肩 (骨盆→脊柱→右肩)
-            2,  # 13: 左肩 (骨盆→脊柱→左肩)
-            3,  # 14: 左肘 (骨盆→脊柱→左肩→左肘)
-            4,  # 15: 左手腕 (骨盆→脊柱→左肩→左肘→左手腕)
+            3,
+            2,
+            1,
+            1,
+            2,
+            3,
+            0,
+            1,
+            2,
+            3,
+            4,
+            3,
+            2,
+            2,
+            3,
+            4,
         ], dtype=torch.float32)
         self.register_buffer('depth_map', depth_map, persistent=False)
         self.use_depth_weighting = use_depth_weighting
@@ -264,7 +251,6 @@ class IKHead(nn.Module):
         )
         self._init_residual_heads_zero()
         
-        # 骨长预测头：预测每个骨骼的缩放因子
         self.bone_length_head = nn.Sequential(
             nn.Linear(gcn_hidden, gcn_hidden // 2),
             nn.ReLU(inplace=True),
@@ -449,7 +435,6 @@ class IKHead(nn.Module):
         x = self.joint_fuse(torch.cat([feat_embed, kpt_embed, conf_embed], dim=-1))
         x = x.reshape(bsz * num_person, num_joints, -1)
 
-        # 计算基于confidence的动态边权重
         edge_weight = None
         if self.use_confidence_weighting and confidence is not None:
             edge_weight = self._compute_edge_weights(
@@ -463,7 +448,6 @@ class IKHead(nn.Module):
 
         dir_resid = torch.tanh(self.out_proj(x)).view(bsz, num_person, num_joints, 3)
         
-        # 预测骨长缩放因子：范围约束在 [1-range, 1+range]
         bone_scale_logits = self.bone_length_head(x).view(bsz, num_person, num_joints)
         bone_length_scales = 1.0 + self.bone_length_range * torch.tanh(bone_scale_logits)
         dir_init = self._compute_initial_dirs(kpt_cart)
@@ -716,21 +700,15 @@ class IKHead(nn.Module):
                                      pred_cart: torch.Tensor,
                                      gt_cart: torch.Tensor,
                                      mask: torch.Tensor) -> torch.Tensor:
-        # 计算基础loss
         loss = F.smooth_l1_loss(
             pred_cart, gt_cart, reduction='none', beta=self.loss_fk_consistency_beta)
         
-        # 应用FK深度加权
         if self.use_depth_weighting:
-            # 深度权重：depth越大，权重越大
             # weight = 1.0 + depth_weight_scale * depth
-            # 例如：depth=0(root) → weight=1.0
-            #      depth=4(手腕) → weight=1.0+0.5*4=3.0
             depth_weights = 1.0 + self.depth_weight_scale * self.depth_map.to(pred_cart.device)
             depth_weights = depth_weights.view(1, 1, -1, 1)  # (1, 1, J, 1)
             loss = loss * depth_weights
         
-        # 应用mask
         valid = mask.unsqueeze(-1).to(dtype=pred_cart.dtype)
         loss = loss * valid
         denom = valid.sum().clamp_min(1.0)
@@ -764,28 +742,21 @@ class IKHead(nn.Module):
         return loss * self.loss_graph_reg_weight
 
     def _compute_edge_weights(self, confidence: torch.Tensor) -> torch.Tensor:
-        """计算基于confidence的动态边权重。
-        
-        策略：如果节点i的confidence高，它向邻居传播的信息权重应该更大。
-        
+        """Compute confidence-based dynamic edge weights.
+
         Args:
             confidence: (B, J) joint confidence scores
-        
+
         Returns:
             edge_weight: (B, J, J) dynamic edge weights
         """
         bsz, num_joints = confidence.shape
         
-        # 归一化confidence到[0, 1]
         conf_norm = confidence.clamp(self.confidence_min, self.confidence_max)
         
-        # 构建edge weight: weight[i,j] = sqrt(conf[i] * conf[j])
-        # 意思是：两端节点都自信时，边权重才高
         conf_matrix = conf_norm.unsqueeze(-1) * conf_norm.unsqueeze(1)  # (B, J, J)
         edge_weight = torch.sqrt(conf_matrix.clamp_min(1e-6))
         
-        # 只保留骨架连接的边（其他位置权重=1，不影响原始邻接矩阵）
-        # self.a_norm中非零位置对应骨架边
         skeleton_mask = (self.a_norm > 0).float()  # (J, J)
         edge_weight = edge_weight * skeleton_mask.unsqueeze(0) + (1.0 - skeleton_mask.unsqueeze(0))
         
@@ -795,15 +766,13 @@ class IKHead(nn.Module):
                                   pred_scales: torch.Tensor,
                                   gt_cart: torch.Tensor,
                                   mask: torch.Tensor) -> torch.Tensor:
-        """计算骨长预测损失。
-        
-        比较预测的骨长缩放因子与GT骨长的实际缩放。
-        
+        """Compute the bone-length prediction loss.
+
         Args:
             pred_scales: (B, P, J) predicted bone length scales
             gt_cart: (B, P, J, 3) ground truth positions in Cartesian
             mask: (B, P, J) validity mask
-        
+
         Returns:
             loss: scalar loss
         """
@@ -813,7 +782,6 @@ class IKHead(nn.Module):
         bsz, num_person, num_joints = pred_scales.shape
         base_lengths = self.fk.bone_lengths_base.to(pred_scales.device)  # (J,)
         
-        # 计算GT骨长
         gt_bone_lengths = gt_cart.new_zeros((bsz, num_person, num_joints))
         for j, parent in enumerate(self.parents):
             if parent < 0:
@@ -821,10 +789,8 @@ class IKHead(nn.Module):
             delta = gt_cart[:, :, j] - gt_cart[:, :, parent]  # (B, P, 3)
             gt_bone_lengths[:, :, j] = delta.norm(dim=-1)  # (B, P)
         
-        # 计算GT骨长相对于base的缩放因子
         gt_scales = gt_bone_lengths / base_lengths.view(1, 1, -1).clamp_min(1e-6)
         
-        # 只对有效的骨骼计算loss（child和parent都有效）
         joint_mask = mask.clone()
         for j, parent in enumerate(self.parents):
             if parent < 0:

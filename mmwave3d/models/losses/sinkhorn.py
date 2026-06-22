@@ -81,8 +81,6 @@ def sinkhorn_matching_loss(pred_coords: torch.Tensor,
                 diff = pred_coords[i, joint_mask] - gt_coords[j, joint_mask]
                 coord_loss = coord_loss + weight * diff.norm(dim=-1).mean()
     
-    # Normalize - 使用tensor操作保持梯度流
-    # BUG FIX: 之前使用.item()会断开梯度链
     coord_loss = coord_loss / torch.clamp(assignment.sum(), min=1.0)
     
     # Confidence loss: use soft assignment as target

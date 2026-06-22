@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
 
-OUTPUT_PATH = Path('/workspace/mmpose/work_dirs/figures/spherical_kernel_branches.png')
+OUTPUT_PATH = Path('work_dirs/figures/spherical_kernel_branches.png')
 
 
 def polar_sector(r0, r1, a0, a1, n=32):

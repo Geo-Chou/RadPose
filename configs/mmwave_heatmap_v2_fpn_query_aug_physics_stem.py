@@ -9,14 +9,14 @@ import math
 
 default_scope = 'mmwave3d'
 custom_imports = dict(imports=['mmwave3d'], allow_failed_imports=False)
-work_dir = './work_dirs/mmwave_heatmap_v2_fpn_query_aug_physics_stem'
+work_dir = './work_dirs/mmpose_outdoor_heatmap'
 
 backend_args = None
 dataset_type = 'MMWaveDataset'
-data_root = 'data/'
+data_root = 'data_outdoor/'
 num_frames = 5
 max_epochs = 50
-iters_per_epoch = 2395
+iters_per_epoch = 213
 max_iters = max_epochs * iters_per_epoch
 point_cloud_range = [0.12, (30 / 180) * math.pi, -(30 / 180) * math.pi,
                      6.0, (150 / 180) * math.pi, (30 / 180) * math.pi]
@@ -26,8 +26,8 @@ world_size = 4
 
 range_bins = 150
 angle_bins = 180
-sigma_r = 0.08
-sigma_a = math.radians(1.0)
+sigma_r = 0.12
+sigma_a = math.radians(1.25)
 
 randomness = dict(
     seed=3407,
@@ -44,7 +44,7 @@ model = dict(
         voxel_angle_size_deg=math.radians(0.5),
         expected_frames=num_frames,
         angles_in_degrees=False,
-        max_tokens_per_sample=20480,
+        max_tokens_per_sample=5120,
         non_blocking=True,
     ),
     transformer=dict(
@@ -134,7 +134,7 @@ train_pipeline = [
     ),
     dict(
         type='TemporalPhaseFiltering',
-        amp_threshold=0.05,
+        amp_threshold=0.5,
         phase_delta=1.5,
         phase_voxel=1.5,
         amp_relax=0.01,
@@ -198,7 +198,7 @@ test_pipeline = [
     ),
     dict(
         type='TemporalPhaseFiltering',
-        amp_threshold=0.05,
+        amp_threshold=0.5,
         phase_delta=1.5,
         phase_voxel=1.5,
         amp_relax=0.01,
@@ -215,8 +215,8 @@ test_pipeline = [
 
 
 train_dataloader = dict(
-    batch_size=6,      # Reduced due to increased model size
-    num_workers=6,
+    batch_size=16,      # Reduced due to increased model size
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
@@ -232,8 +232,8 @@ train_dataloader = dict(
 )
 
 val_dataloader = dict(
-    batch_size=6,
-    num_workers=6,
+    batch_size=16,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(

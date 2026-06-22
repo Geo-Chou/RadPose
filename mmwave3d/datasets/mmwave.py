@@ -190,6 +190,8 @@ class MMWaveDataset(BaseDataset):
         # deepcopy here to avoid inplace modification in pipeline.
         input_dict = copy.deepcopy(ori_input_dict)
         real_path_list = []
+        ann_info_frames = []
+        eval_ann_info_frames = []
         if (not self.index_to_folder_pos or
                 len(self.index_to_folder_pos) != len(self.data_list)):
             self._build_source_folder_cache()
@@ -207,8 +209,16 @@ class MMWaveDataset(BaseDataset):
             curr_index = folder_indices[target_pos]
             curr_info = self.get_data_info(curr_index)
             real_path_list.append(curr_info['radar_points_path'])
+            if 'ann_info' in curr_info:
+                ann_info_frames.append(copy.deepcopy(curr_info['ann_info']))
+            if 'eval_ann_info' in curr_info:
+                eval_ann_info_frames.append(copy.deepcopy(curr_info['eval_ann_info']))
 
         input_dict['radar_points_paths'] = real_path_list
+        if ann_info_frames:
+            input_dict['ann_info_frames'] = ann_info_frames
+        if eval_ann_info_frames:
+            input_dict['eval_ann_info_frames'] = eval_ann_info_frames
         if real_path_list:
             center_idx = len(real_path_list) // 2
             input_dict['sample_name'] = Path(

@@ -333,8 +333,6 @@ class SetPredictionLossV2(nn.Module):
                     diff = pred_person[pi, joint_mask] - gt_person[gidx, joint_mask]
                     coord_loss = coord_loss + weight * diff.norm(dim=-1).mean()
         
-        # Normalize - 使用tensor操作保持梯度流，不要使用.item()
-        # BUG FIX: 之前使用assignment.sum().item()会断开梯度链
         coord_loss = coord_loss / torch.clamp(assignment.sum(), min=1.0)
         
         # Confidence loss: Use soft assignment as soft target

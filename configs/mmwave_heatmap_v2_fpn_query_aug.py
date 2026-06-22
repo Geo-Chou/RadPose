@@ -415,7 +415,7 @@ visualizer = dict(
 
 
 auto_scale_lr = dict(enable=False, base_batch_size=8)
-load_from = '/workspace/mmpose/work_dirs/mmwave_heatmap_fpn_single_final/epoch_19.pth'
+load_from = 'work_dirs/mmwave_heatmap_fpn_single_final/epoch_19.pth'
 resume = False
 find_unused_parameters = True
 

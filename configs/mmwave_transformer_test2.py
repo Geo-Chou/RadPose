@@ -215,5 +215,5 @@ auto_scale_lr = dict(enable=False, base_batch_size=2)
 work_dir = './work_dirs/mmwave_transformer_without_angle'
 load_from = None
 resume = False
-# resume = '/workspace/mmpose/work_dirs/mmwave_transformer_without_angle/last_checkpoint'
+# resume = 'work_dirs/mmwave_transformer_without_angle/last_checkpoint'
 find_unused_parameters = False

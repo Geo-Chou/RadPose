@@ -8,7 +8,7 @@ from tqdm import tqdm
 def get_args():
     parser = argparse.ArgumentParser(
         description='Filter samples where annotation is not exactly one person')
-    parser.add_argument('--data-root', type=str, default='/workspace/mmpose/data')
+    parser.add_argument('--data-root', type=str, default='data')
     parser.add_argument(
         '--source',
         type=str,

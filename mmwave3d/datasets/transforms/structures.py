@@ -467,6 +467,18 @@ class MmWaveDataSample(BaseDataElement):
         del self._gt_keypoints_3d
 
     @property
+    def gt_keypoints_3d_frames(self) -> Tensor:
+        return self._gt_keypoints_3d_frames
+
+    @gt_keypoints_3d_frames.setter
+    def gt_keypoints_3d_frames(self, value: Tensor) -> None:
+        self.set_field(value, '_gt_keypoints_3d_frames', dtype=Tensor)
+
+    @gt_keypoints_3d_frames.deleter
+    def gt_keypoints_3d_frames(self) -> None:
+        del self._gt_keypoints_3d_frames
+
+    @property
     def pred_keypoints_3d(self) -> Tensor:
         return self._pred_keypoints_3d
 

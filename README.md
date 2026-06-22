@@ -1,10 +1,8 @@
 # RadPose: 3D Human Skeleton Estimation with an Integrated Sensing-and-Communication Device
 
-> Geo Jie Zhou, Ruxin Lin, Shengding Liu, Bingheng Li
-> 
-> Department of Computer Science Engineering, Michigan State University
+> Anonymous Authors
 
-**This is the official implement of RadPose. (This work has been submit for publication, please check interest confliction)**
+**Anonymous implementation for review.**
 
 ## Demo
 <p align='center'>
@@ -41,7 +39,7 @@ cd ..
 
 # radpose packages
 # clone this repo
-git clone https://github.com/Geo-Chou/RadPose.git
+git clone [anonymous-repository-url]
 cd RadPose
 pip install -v -e .
 
@@ -50,7 +48,7 @@ pip install spconv-cu118
 If your current cuda is not 11.8, and you want to follow instructions above, please first change the environment parameters to **CUDA 11.8**.
 
 ##  Dataset Preparation
-Please see [this blog](https://blog.geo-zhou.com/2025/11/01/251101_mmwave_Data_Collection/) for quick start.
+Please follow the dataset preparation instructions provided with the anonymous submission package.
 
 ## 🚀 Quick Start
 ### Training and Evaluation
@@ -67,7 +65,7 @@ cd RadPose
 cd RadPose
 ./tools/test.py configs/[target config file].py work_dirs/[target checkpoint file].pth
 ```
-To refine the skeleton with inverse kinematic, you may need train the backbone first, like this [config file](https://github.com/Geo-Chou/RadPose/blob/main/configs/mmwave_heatmap_v2_fpn_query_aug_physics_stem.py). Then, you should transfer the checkpoint into inverse kinematic version in order to refine.
+To refine the skeleton with inverse kinematic, you may need train the backbone first, like this [config file](configs/mmwave_heatmap_v2_fpn_query_aug_physics_stem.py). Then, you should transfer the checkpoint into inverse kinematic version in order to refine.
 ```
 python tools/remap_heatmap_ckpt_to_ik.py [source ckpt path] [target ckpt path]
 ```
@@ -86,9 +84,3 @@ To visualize the predicted pose, what you should do is add following metric into
 python tools/visualize_skeleton_3d.py --input work_dirs/predictions/ --output work_dirs/vis_output/ --pred-only
 ```
 
-## 🙏 Acknowledgement
-Thanks a lot to these excellent projects:
-
-[mmpose](https://github.com/open-mmlab/mmpose/tree/main)
-
-[mmengine](https://github.com/open-mmlab/mmengine)

@@ -19,7 +19,7 @@ SKELETON_EDGES_16 = [
 def get_args():
     parser = argparse.ArgumentParser(
         description='Clean annotations with null keypoints and compute skeleton length stats')
-    parser.add_argument('--data-root', type=str, default='/workspace/mmpose/data')
+    parser.add_argument('--data-root', type=str, default='data')
     parser.add_argument('--dry-run', action='store_true', help='Only report, no file deletion')
     return parser.parse_args()
 

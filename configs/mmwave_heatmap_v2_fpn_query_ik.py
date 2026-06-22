@@ -15,26 +15,26 @@ import math
 
 default_scope = 'mmwave3d'
 custom_imports = dict(imports=['mmwave3d'], allow_failed_imports=False)
-work_dir = './work_dirs/mmwave_heatmap_ik_extend'
+work_dir = './work_dirs/mmwave_heatmap_ik_outdoor'
 
 backend_args = None
 dataset_type = 'MMWaveDataset'
-data_root = 'dim/'
+data_root = 'data_outdoor/'
 num_frames = 5
-max_epochs = 10
+max_epochs = 100
 iters_per_epoch = 200
 
 max_iters = max_epochs * iters_per_epoch
-point_cloud_range = [0.12, (30/180)*math.pi, -(30/180)*math.pi, 6.0, (150/180)*math.pi, (30/180)*math.pi]
+point_cloud_range = [0.12, (30 / 180) * math.pi, -(30 / 180) * math.pi,
+                     6.0, (150 / 180) * math.pi, (30 / 180) * math.pi]
 angle_voxel_size = math.radians(1.0)
 data_norm = True
 world_size = 4
 
-# Heatmap parameters - Higher resolution for better accuracy
 range_bins = 150
 angle_bins = 180
-sigma_r = 0.08
-sigma_a = math.radians(1.0)
+sigma_r = 0.12
+sigma_a = math.radians(1.25)
 
 
 randomness = dict(
@@ -52,7 +52,7 @@ model = dict(
         voxel_angle_size_deg=math.radians(0.5),
         expected_frames=num_frames,
         angles_in_degrees=False,
-        max_tokens_per_sample=20480,
+        max_tokens_per_sample=5120,
         non_blocking=True,
     ),
      transformer=dict(
@@ -163,38 +163,33 @@ model = dict(
             gcn_layers=3,
             joint_attn_num_heads=4,
             joint_attn_dropout=0.1,
-            # MODIFIED: 简化loss设计，避免冲突
-            # 1. loss_ik_bias与loss_ik_coord目标冲突 → 移除
-            # 2. loss_fk_consistency与loss_ik_coord重复 → 降低权重
-            # 3. 强化主要目标：最终位置准确性
             loss_ik_coord=dict(
                 type='MPJPELoss',
                 reduction='mean',
-                loss_weight=3.0  # 提高主loss权重（从2.0）
+                loss_weight=3.0
             ),
-            loss_ik_bias_weight=0.0,  # 移除冲突的bias loss（从1.0）
+            loss_ik_bias_weight=0.0,
             loss_ik_bias_beta=0.1,
             # IK-specific losses
             # Angle loss on predicted bone directions:
             # 'geodesic' (SO(3)-style angular error proxy) or 'l1'
-            loss_ik_angle_weight=0.2,  # 降低权重（从0.5）
+            loss_ik_angle_weight=0.2,
             loss_ik_angle_type='geodesic',
             loss_ik_angle_beta=0.1,
             # FK consistency: ||FK(theta_hat) - p_gt||
-            loss_fk_consistency_weight=0.3,  # 降低权重，避免重复（从1.0）
+            loss_fk_consistency_weight=0.3,
             loss_fk_consistency_beta=0.1,
             # Graph regularization on neighboring joint features
             loss_graph_reg_weight=0.01,
             # Bone length prediction loss
-            loss_bone_length_weight=0.5,  # 骨长预测损失
-            bone_length_range=0.15,  # 骨长缩放范围：[0.85, 1.15]
+            loss_bone_length_weight=0.5,
+            bone_length_range=0.15,
             # Confidence-based features
-            use_confidence=True,  # 是否在loss计算时使用confidence作为样本权重
-            use_confidence_weighting=False,  # 暂时关闭动态边权重，使用静态邻接
+            use_confidence=True,
+            use_confidence_weighting=False,
             # Decode directly from heatmap distributions inside IKHead
             point_cloud_range=point_cloud_range,
             softargmax_temperature=3.0,
-            # FK深度加权：缓解误差累积
             use_depth_weighting=True,
             depth_weight_scale=0.5,  # weight = 1.0 + 0.5 * depth
             # FK manifold + residual refinement
@@ -222,7 +217,7 @@ train_pipeline = [
     ),
     dict(
         type='TemporalPhaseFiltering',
-        amp_threshold=0.05,
+        amp_threshold=0.65,
         phase_delta=1.5,
         phase_voxel=1.5,
         amp_relax=0.01,
@@ -286,7 +281,7 @@ test_pipeline = [
     ),
     dict(
         type='TemporalPhaseFiltering',
-        amp_threshold=0.05,
+        amp_threshold=0.65,
         phase_delta=1.5,
         phase_voxel=1.5,
         amp_relax=0.01,
@@ -303,7 +298,7 @@ test_pipeline = [
 
 
 train_dataloader = dict(
-    batch_size=8,      # Reduced due to increased model size
+    batch_size=16,      # Reduced due to increased model size
     num_workers=8,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -313,14 +308,14 @@ train_dataloader = dict(
         ann_file='train/annotations',
         pipeline=train_pipeline,
         num_frames=num_frames,
-        frame_interval=2,
+        frame_interval=1,
         metainfo_file='metainfo.json',
         backend_args=backend_args
     )
 )
 
 val_dataloader = dict(
-    batch_size=8,
+    batch_size=16,
     num_workers=8,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
@@ -395,19 +390,17 @@ test_cfg = dict(type='TestLoop')
 # Optimizer & Scheduler
 # ============================================================================
 
-# MODIFIED: 调整学习率策略，让不同模块以不同速度更新
-# 解决loss震荡问题：让backbone也参与训练，改善特征质量
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=5e-4, weight_decay=1e-4),
     paramwise_cfg=dict(
         custom_keys={
-            'data_preprocessor': dict(lr_mult=0.0),    # 冻结预处理层
-            'transformer.spconv': dict(lr_mult=0.05),  # SpConv很小的lr
-            'transformer.fpn': dict(lr_mult=0.05),     # FPN很小的lr
-            'transformer': dict(lr_mult=0.1),           # Transformer较小lr
-            'head.heatmap_head': dict(lr_mult=0.1),     # Heatmap中等lr（从0.01提升）
-            'head.ik_head': dict(lr_mult=1.0),          # IK head正常lr
+            'data_preprocessor': dict(lr_mult=0.0),
+            'transformer.spconv': dict(lr_mult=0.05),
+            'transformer.fpn': dict(lr_mult=0.05),
+            'transformer': dict(lr_mult=0.1),
+            'head.heatmap_head': dict(lr_mult=0.1),
+            'head.ik_head': dict(lr_mult=1.0),
         }
     ),
     clip_grad=dict(max_norm=10.0, norm_type=2),
@@ -455,8 +448,6 @@ default_hooks = dict(
 )
 
 # Custom training strategy hooks
-# MODIFIED: 解冻backbone以解决梯度稀疏问题
-# 改用学习率分层控制代替完全冻结
 custom_hooks = [
     # dict(
     #     type='FreezeModelExceptHook',
@@ -482,7 +473,7 @@ visualizer = dict(
 
 
 auto_scale_lr = dict(enable=False, base_batch_size=8)
-load_from = '/workspace/mmpose/checkpoints/0302_ikuse_sp.pth'
+load_from = 'work_dirs/mmpose_outdoor_heatmap/best_heatmap_for_ik.pth'
 resume = False
 find_unused_parameters = True
 

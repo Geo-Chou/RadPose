@@ -181,8 +181,18 @@ class LoadAnnotations3D(MMCV_LoadAnnotations):
     def _load_keypoints_3d(self, results):
         if not self.eval:
             results['gt_keypoints_3d'] = results['ann_info']['gt_keypoints_3d']
+            ann_frames = results.get('ann_info_frames', None)
         if self.eval:
             results['gt_keypoints_3d'] = results['eval_ann_info']['gt_keypoints_3d']
+            ann_frames = results.get('eval_ann_info_frames', None)
+        if ann_frames is not None:
+            frame_keypoints = []
+            for ann_info in ann_frames:
+                if ann_info is None:
+                    frame_keypoints.append(results['gt_keypoints_3d'][:0])
+                else:
+                    frame_keypoints.append(ann_info['gt_keypoints_3d'])
+            results['gt_keypoints_3d_frames'] = frame_keypoints
         return results
         # pass
 

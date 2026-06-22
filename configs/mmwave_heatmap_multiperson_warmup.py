@@ -451,6 +451,6 @@ visualizer = dict(
 # ============================================================================
 
 auto_scale_lr = dict(enable=False, base_batch_size=8)
-load_from = '/workspace/mmpose/work_dirs/mmwave_heatmap_multiperson_warmup_true_run/0117best_heatmap_MPJPE_iter_41106.pth'
+load_from = 'work_dirs/mmwave_heatmap_multiperson_warmup_true_run/0117best_heatmap_MPJPE_iter_41106.pth'
 resume = False
 find_unused_parameters = False

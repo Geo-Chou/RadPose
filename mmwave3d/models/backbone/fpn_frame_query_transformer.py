@@ -301,6 +301,10 @@ class FPNFrameQueryTransformer(nn.Module):
             # Use SpConv for dense voxel feature extraction
             tokens_proj = self._apply_spconv(inputs['mmwave_voxels'], 
                                             inputs.get('mmwave_coords', None))
+        elif tokens.size(-1) == self.spconv_out_channels:
+            # Some subclasses may precompute local sparse features before
+            # delegating to this common transformer path.
+            tokens_proj = tokens
         elif hasattr(self, 'feature_proj'):
             # Fallback: Linear projection
             tokens_proj = self.feature_proj(tokens)  # (B, F, L, spconv_out)

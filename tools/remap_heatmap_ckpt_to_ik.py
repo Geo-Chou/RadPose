@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import pickle
 from collections import OrderedDict
 from typing import Dict
 
@@ -43,6 +44,19 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='Map all keys under src-prefix. Default behavior is already this; '
              'kept for explicitness in command history.')
+    parser.add_argument(
+        '--trusted-source',
+        action='store_true',
+        help='Allow loading full checkpoint metadata with pickle. Required for '
+             'MMEngine checkpoints on PyTorch 2.6+ when weights_only loading '
+             'rejects objects such as HistoryBuffer. Only use for checkpoints '
+             'from a trusted source.')
+    parser.add_argument(
+        '--keep-checkpoint-state',
+        action='store_true',
+        help='Keep resume-only runner state such as optimizer, scheduler, and '
+             'message_hub. By default these are stripped so the output can be '
+             'used with load_from under PyTorch 2.6+ weights_only loading.')
     return parser.parse_args()
 
 
@@ -61,10 +75,21 @@ def remap_state_dict(state_dict: Dict[str, torch.Tensor],
     return remapped, mapped_count
 
 
-def _safe_torch_load(path: str):
+def _safe_torch_load(path: str, trusted_source: bool = False):
     """Load checkpoint in the same runtime env as training (mmengine present)."""
     try:
+        if trusted_source:
+            return torch.load(path, map_location='cpu', weights_only=False)
         return torch.load(path, map_location='cpu')
+    except pickle.UnpicklingError as exc:
+        raise RuntimeError(
+            'Failed to load checkpoint with PyTorch weights_only mode. '
+            'PyTorch 2.6+ defaults torch.load(weights_only=True), which can '
+            'reject MMEngine checkpoint metadata such as HistoryBuffer. If this '
+            'checkpoint was produced by your own training run or another trusted '
+            'source, re-run with --trusted-source to load it with '
+            'weights_only=False.'
+        ) from exc
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             'Failed to load checkpoint due to missing dependency module. '
@@ -83,7 +108,7 @@ def main() -> None:
         raise FileExistsError(
             f'Destination exists: {args.dst}. Use --overwrite to replace it.')
 
-    ckpt = _safe_torch_load(args.src)
+    ckpt = _safe_torch_load(args.src, trusted_source=args.trusted_source)
     if not isinstance(ckpt, dict):
         raise TypeError('Checkpoint must be a dict-like object.')
     if 'state_dict' not in ckpt:
@@ -96,6 +121,10 @@ def main() -> None:
     new_state, mapped_count = remap_state_dict(
         old_state, args.src_prefix, args.dst_prefix)
     ckpt['state_dict'] = new_state
+    if not args.keep_checkpoint_state:
+        for key in ('message_hub', 'optimizer', 'optim_wrapper',
+                    'param_schedulers', 'scheduler'):
+            ckpt.pop(key, None)
 
     os.makedirs(os.path.dirname(args.dst) or '.', exist_ok=True)
     torch.save(ckpt, args.dst)

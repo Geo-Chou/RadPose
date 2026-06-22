@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataproc-root",
         type=Path,
-        default=Path("/workspace/dataproc"),
+        default=Path("data/raw"),
         help="Root of dataproc folders.")
     parser.add_argument(
         "--output-root",

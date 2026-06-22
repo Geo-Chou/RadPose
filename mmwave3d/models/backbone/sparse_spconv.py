@@ -367,3 +367,54 @@ class MmWaveSpConvTransformerBackbone(nn.Module):
         pos_flat = pos.reshape(bsz, frames * seq_len, -1)
         outputs = dict(features=x_out, positions=pos_flat)
         return outputs
+
+
+@MODELS.register_module()
+class MmWaveSpConvTransformerM2MBackbone(MmWaveSpConvTransformerBackbone):
+    """m-to-m sparse conv transformer that preserves per-frame token features."""
+
+    def _run_transformer(self,
+                         tokens: torch.Tensor,
+                         pos_grid: torch.Tensor,
+                         valid_mask: torch.Tensor) -> Dict[str, torch.Tensor]:
+        bsz, frames, seq_len, _ = tokens.shape
+        device = tokens.device
+
+        frame_coord = torch.arange(frames, device=device, dtype=tokens.dtype)
+        frame_coord = frame_coord.view(1, frames, 1, 1).expand(
+            bsz, frames, seq_len, 1)
+        pos = torch.cat([pos_grid.to(dtype=tokens.dtype), frame_coord], dim=-1)
+
+        token_feat = self.token_embed(tokens)
+        pos_enc = self._encode_pos(pos)
+        pos_feat = self.pos_embed(pos_enc)
+        x = token_feat + pos_feat
+
+        x_spatial = x.view(bsz * frames, seq_len, -1).permute(1, 0, 2)
+        spatial_mask = ~valid_mask.view(bsz * frames, seq_len)
+        x_spatial = self.spatial_encoder(
+            x_spatial, src_key_padding_mask=spatial_mask)
+        x_spatial = x_spatial.permute(1, 0, 2).view(
+            bsz, frames, seq_len, -1)
+
+        x_temp = x_spatial.permute(0, 2, 1, 3)
+        x_temp = x_temp.reshape(bsz * seq_len, frames, -1).permute(1, 0, 2)
+        temporal_mask = ~valid_mask.permute(0, 2, 1).reshape(
+            bsz * seq_len, frames)
+        x_temp = self.temporal_encoder(
+            x_temp, src_key_padding_mask=temporal_mask)
+        x_temp = x_temp.permute(1, 0, 2).reshape(
+            bsz, seq_len, frames, -1)
+
+        frame_features = x_temp.permute(0, 2, 1, 3).contiguous()
+        frame_positions = pos.contiguous()
+        frame_valid_mask = valid_mask.contiguous()
+        features = frame_features.reshape(bsz, frames * seq_len, -1)
+        positions = frame_positions.reshape(bsz, frames * seq_len, -1)
+
+        return dict(
+            features=features,
+            positions=positions,
+            frame_features=frame_features,
+            frame_positions=frame_positions,
+            frame_valid_mask=frame_valid_mask)

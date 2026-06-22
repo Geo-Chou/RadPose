@@ -5,10 +5,11 @@ import glob
 import re
 from tqdm import tqdm
 
-data_root = "/workspace/mmpose/data_unfilter_ruxin/"
-target_data_root = "/workspace/mmpose/ruxin/"
+data_root = "unfiltered_outdoor/"
+target_data_root = "data_outdoor/"
 group_size = 100
-train_group_ratio = 0.
+train_group_ratio = 0.8
+max_point_radius = 6.0
 # concatenate all data into one data path list
 data_folders = sorted(os.listdir(data_root))
 
@@ -59,6 +60,13 @@ def is_valid_annotation(objs):
             if not isinstance(keypoint, list) or len(keypoint) < 3:
                 return False
             if keypoint[0] is None or keypoint[1] is None or keypoint[2] is None:
+                return False
+            radius = (
+                keypoint[0] ** 2 +
+                keypoint[1] ** 2 +
+                keypoint[2] ** 2
+            ) ** 0.5
+            if radius > max_point_radius:
                 return False
     return True
 
