@@ -1,4 +1,6 @@
--r requirements/build.txt
--r requirements/optional.txt
--r requirements/runtime.txt
--r requirements/tests.txt
+mmcv-lite>=2.0.0rc4,<2.2.0
+mmengine>=0.8.0,<1.0.0
+numpy
+scipy
+spconv-cu118
+torch>=2.0

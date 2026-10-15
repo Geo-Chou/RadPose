@@ -7,24 +7,44 @@ import torch.nn.functional as F
 from mmwave3d.registry import MODELS
 from mmwave3d.utils import spherical_to_cartesian
 
-
 SKELETON_EDGES_17 = [
-    (0, 1), (0, 2), (1, 2),        # head
-    (1, 3), (3, 5), (5, 7), (7, 9),  # right arm
-    (2, 4), (4, 6), (6, 8), (8, 10),  # left arm
-    (5, 6), (5, 11), (11, 12), (6, 12),  # torso
-    (11, 13), (13, 15),              # right leg
-    (12, 14), (14, 16)               # left leg
+    (0, 1),
+    (0, 2),
+    (1, 2),
+    (1, 3),
+    (3, 5),
+    (5, 7),
+    (7, 9),
+    (2, 4),
+    (4, 6),
+    (6, 8),
+    (8, 10),
+    (5, 6),
+    (5, 11),
+    (11, 12),
+    (6, 12),
+    (11, 13),
+    (13, 15),
+    (12, 14),
+    (14, 16),
 ]
 
 SKELETON_EDGES_16 = [
-    (0, 1), (1, 2), (2, 6),        # left leg
-    (5, 4), (4,3), (3,6), # right leg
-    (6,7),  # body
-    (10,11), (11,12), (12,7),  # left arm
-    (15,14), (14,13), (13,7),    # right arm
-    (7,8), (8,9)   # head and neck
-
+    (0, 1),
+    (1, 2),
+    (2, 6),
+    (5, 4),
+    (4, 3),
+    (3, 6),
+    (6, 7),
+    (10, 11),
+    (11, 12),
+    (12, 7),
+    (15, 14),
+    (14, 13),
+    (13, 7),
+    (7, 8),
+    (8, 9),
 ]
 
 
@@ -34,33 +54,35 @@ def _edge_index(device: torch.device) -> torch.Tensor:
 
 @MODELS.register_module()
 class SkeletonLengthLoss(nn.Module):
-    """Per-edge length loss using a fixed 17-joint skeleton."""
-
-    def __init__(self,
-                 reduction: str = 'mean',
-                 loss_weight: float = 1.0,
-                 spherical_input: bool = True,
-                 loss_type: str = 'l1',
-                 eps: float = 1e-6) -> None:
+    def __init__(
+        self,
+        reduction: str = "mean",
+        loss_weight: float = 1.0,
+        spherical_input: bool = True,
+        loss_type: str = "l1",
+        eps: float = 1e-6,
+    ) -> None:
         super().__init__()
-        assert reduction in ['mean', 'sum']
-        assert loss_type in ['l1', 'smooth_l1']
+        assert reduction in ["mean", "sum"]
+        assert loss_type in ["l1", "smooth_l1"]
         self.reduction = reduction
         self.loss_weight = loss_weight
         self.spherical_input = spherical_input
         self.loss_type = loss_type
         self.eps = eps
 
-    def forward(self,
-                pred: torch.Tensor,
-                target: torch.Tensor,
-                mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if self.spherical_input:
             pred = spherical_to_cartesian(pred)
             target = spherical_to_cartesian(target)
         pred = torch.nan_to_num(pred, nan=0.0, posinf=0.0, neginf=0.0)
         target = torch.nan_to_num(target, nan=0.0, posinf=0.0, neginf=0.0)
-        eps = max(self.eps, torch.finfo(pred.dtype).eps)
+        max(self.eps, torch.finfo(pred.dtype).eps)
 
         edges = _edge_index(pred.device)
         j1, j2 = edges[:, 0], edges[:, 1]
@@ -71,9 +93,8 @@ class SkeletonLengthLoss(nn.Module):
         pred_len = pred_vec.norm(dim=-1)
         target_len = target_vec.norm(dim=-1)
 
-        if self.loss_type == 'smooth_l1':
-            per_edge = F.smooth_l1_loss(
-                pred_len, target_len, reduction='none')
+        if self.loss_type == "smooth_l1":
+            per_edge = F.smooth_l1_loss(pred_len, target_len, reduction="none")
         else:
             per_edge = (pred_len - target_len).abs()
 
@@ -85,7 +106,7 @@ class SkeletonLengthLoss(nn.Module):
         else:
             denom = per_edge.new_tensor(per_edge.numel())
 
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             loss = per_edge.sum() / denom
         else:
             loss = per_edge.sum()
@@ -94,26 +115,28 @@ class SkeletonLengthLoss(nn.Module):
 
 @MODELS.register_module()
 class SkeletonAngleLoss(nn.Module):
-    """Per-edge angle loss between predicted and target bone vectors."""
-
-    def __init__(self,
-                 reduction: str = 'mean',
-                 loss_weight: float = 1.0,
-                 spherical_input: bool = True,
-                 use_arccos: bool = False,
-                 eps: float = 1e-6) -> None:
+    def __init__(
+        self,
+        reduction: str = "mean",
+        loss_weight: float = 1.0,
+        spherical_input: bool = True,
+        use_arccos: bool = False,
+        eps: float = 1e-6,
+    ) -> None:
         super().__init__()
-        assert reduction in ['mean', 'sum']
+        assert reduction in ["mean", "sum"]
         self.reduction = reduction
         self.loss_weight = loss_weight
         self.spherical_input = spherical_input
         self.use_arccos = use_arccos
         self.eps = eps
 
-    def forward(self,
-                pred: torch.Tensor,
-                target: torch.Tensor,
-                mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if self.spherical_input:
             pred = spherical_to_cartesian(pred)
             target = spherical_to_cartesian(target)
@@ -126,6 +149,8 @@ class SkeletonAngleLoss(nn.Module):
         pred_vec = pred[..., j2, :] - pred[..., j1, :]
         target_vec = target[..., j2, :] - target[..., j1, :]
 
+        pred_vec = pred_vec.float()
+        target_vec = target_vec.float()
         pred_len = pred_vec.norm(dim=-1).clamp_min(self.eps)
         target_len = target_vec.norm(dim=-1).clamp_min(self.eps)
 
@@ -144,7 +169,7 @@ class SkeletonAngleLoss(nn.Module):
         else:
             denom = per_edge.new_tensor(per_edge.numel())
 
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             loss = per_edge.sum() / denom
         else:
             loss = per_edge.sum()

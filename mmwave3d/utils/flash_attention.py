@@ -8,19 +8,21 @@ import torch.nn.functional as F
 
 
 class FlashMultiheadAttention(nn.Module):
-    """Stable SDPA wrapper for paths that do not require attention weights."""
-
-    def __init__(self,
-                 embed_dim: int,
-                 num_heads: int,
-                 dropout: float = 0.0,
-                 bias: bool = True,
-                 batch_first: bool = True) -> None:
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+        batch_first: bool = True,
+    ) -> None:
         super().__init__()
         if embed_dim % num_heads != 0:
-            raise ValueError('embed_dim must be divisible by num_heads.')
+            raise ValueError("embed_dim must be divisible by num_heads.")
         if not batch_first:
-            raise ValueError('FlashMultiheadAttention currently supports batch_first=True only.')
+            raise ValueError(
+                "FlashMultiheadAttention currently supports batch_first=True only."
+            )
 
         self.embed_dim = int(embed_dim)
         self.num_heads = int(num_heads)
@@ -33,23 +35,26 @@ class FlashMultiheadAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias)
 
-    def forward(self,
-                query: torch.Tensor,
-                key: torch.Tensor,
-                value: torch.Tensor,
-                key_padding_mask: Optional[torch.Tensor] = None,
-                need_weights: bool = False,
-                attn_mask: Optional[torch.Tensor] = None,
-                average_attn_weights: bool = True,
-                is_causal: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        key_padding_mask: Optional[torch.Tensor] = None,
+        need_weights: bool = False,
+        attn_mask: Optional[torch.Tensor] = None,
+        average_attn_weights: bool = True,
+        is_causal: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         if need_weights:
             raise NotImplementedError(
-                'FlashMultiheadAttention only supports need_weights=False. '
-                'Use nn.MultiheadAttention for paths that require attention weights.')
+                "FlashMultiheadAttention only supports need_weights=False. "
+                "Use nn.MultiheadAttention for paths that require attention weights."
+            )
         if average_attn_weights is False:
-            raise NotImplementedError('average_attn_weights=False is unsupported.')
+            raise NotImplementedError("average_attn_weights=False is unsupported.")
         if query.dim() != 3 or key.dim() != 3 or value.dim() != 3:
-            raise ValueError('Expected query/key/value to be shaped (B, L, C).')
+            raise ValueError("Expected query/key/value to be shaped (B, L, C).")
 
         bsz, tgt_len, _ = query.shape
         src_len = key.size(1)
@@ -65,7 +70,8 @@ class FlashMultiheadAttention(nn.Module):
             device=query.device,
             dtype=q.dtype,
             key_padding_mask=key_padding_mask,
-            attn_mask=attn_mask)
+            attn_mask=attn_mask,
+        )
 
         out = F.scaled_dot_product_attention(
             q,
@@ -73,23 +79,30 @@ class FlashMultiheadAttention(nn.Module):
             v,
             attn_mask=merged_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal)
+            is_causal=is_causal,
+        )
         out = out.transpose(1, 2).contiguous().view(bsz, tgt_len, self.embed_dim)
         out = self.out_proj(out)
         out = torch.nan_to_num(out)
         return out, None
 
-    def _reshape_heads(self, x: torch.Tensor, batch_size: int, seq_len: int) -> torch.Tensor:
-        return x.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+    def _reshape_heads(
+        self, x: torch.Tensor, batch_size: int, seq_len: int
+    ) -> torch.Tensor:
+        return x.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
 
-    def _merge_masks(self,
-                     batch_size: int,
-                     tgt_len: int,
-                     src_len: int,
-                     device: torch.device,
-                     dtype: torch.dtype,
-                     key_padding_mask: Optional[torch.Tensor],
-                     attn_mask: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+    def _merge_masks(
+        self,
+        batch_size: int,
+        tgt_len: int,
+        src_len: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        key_padding_mask: Optional[torch.Tensor],
+        attn_mask: Optional[torch.Tensor],
+    ) -> Optional[torch.Tensor]:
         merged_mask = None
 
         if attn_mask is not None:
@@ -99,14 +112,15 @@ class FlashMultiheadAttention(nn.Module):
                 if attn_mask.size(0) == batch_size:
                     merged_mask = attn_mask.view(batch_size, 1, tgt_len, src_len)
                 elif attn_mask.size(0) == batch_size * self.num_heads:
-                    merged_mask = attn_mask.view(batch_size, self.num_heads, tgt_len, src_len)
+                    merged_mask = attn_mask.view(
+                        batch_size, self.num_heads, tgt_len, src_len
+                    )
                 else:
-                    raise ValueError('Unsupported attn_mask shape.')
+                    raise ValueError("Unsupported attn_mask shape.")
             else:
-                raise ValueError('attn_mask must be 2D or 3D.')
+                raise ValueError("attn_mask must be 2D or 3D.")
             merged_mask = merged_mask.to(device=device)
             if merged_mask.dtype == torch.bool:
-                # Match nn.MultiheadAttention semantics: True means "blocked".
                 merged_mask = ~merged_mask
             else:
                 merged_mask = merged_mask.to(dtype=dtype)
@@ -114,7 +128,7 @@ class FlashMultiheadAttention(nn.Module):
         if key_padding_mask is not None:
             key_padding_mask = key_padding_mask.to(device=device, dtype=torch.bool)
             if key_padding_mask.dim() != 2:
-                raise ValueError('key_padding_mask must be 2D with shape (B, S).')
+                raise ValueError("key_padding_mask must be 2D with shape (B, S).")
             all_padded = key_padding_mask.all(dim=1)
             if all_padded.any():
                 key_padding_mask = key_padding_mask.clone()
@@ -126,9 +140,11 @@ class FlashMultiheadAttention(nn.Module):
                 merged_mask = merged_mask & allowed_kpm
             else:
                 padding_bias = torch.zeros(
-                    (batch_size, 1, 1, src_len), device=device, dtype=dtype)
+                    (batch_size, 1, 1, src_len), device=device, dtype=dtype
+                )
                 padding_bias = padding_bias.masked_fill(
-                    ~allowed_kpm, torch.finfo(dtype).min)
+                    ~allowed_kpm, torch.finfo(dtype).min
+                )
                 merged_mask = merged_mask + padding_bias
 
         return merged_mask

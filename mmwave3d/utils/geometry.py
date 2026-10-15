@@ -2,7 +2,6 @@ import torch
 
 
 def spherical_to_cartesian(coords: torch.Tensor) -> torch.Tensor:
-    """Convert spherical (r, az, el) coordinates to Cartesian xyz."""
     if coords is None or coords.shape[-1] < 3:
         return coords
     r = coords[..., 0]

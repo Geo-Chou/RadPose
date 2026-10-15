@@ -10,40 +10,42 @@ from mmwave3d.registry import MODELS
 
 @MODELS.register_module()
 class MmKeypoints(BaseModel):
-    """Full mmWave keypoint pipeline: voxelization -> transformer -> head."""
-
-    def __init__(self,
-                 data_preprocessor: Dict,
-                 transformer: Dict,
-                 head: Dict,
-                 init_cfg: Optional[Dict] = None) -> None:
+    def __init__(
+        self,
+        data_preprocessor: Dict,
+        transformer: Dict,
+        head: Dict,
+        init_cfg: Optional[Dict] = None,
+    ) -> None:
         super().__init__(data_preprocessor=data_preprocessor, init_cfg=init_cfg)
         self.voxelizer = self.data_preprocessor
         self.transformer = MODELS.build(transformer)
         self.head = MODELS.build(head)
 
-    def extract_feat(self, batch_inputs: Dict[str, torch.Tensor]
-                     ) -> Dict[str, torch.Tensor]:
-        """Alias to keep compatibility with BaseModel hooks."""
+    def extract_feat(
+        self, batch_inputs: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
         feats = self.transformer(batch_inputs)
         return feats
 
-    def forward(self,
-                inputs: Dict[str, torch.Tensor],
-                data_samples: Optional[List] = None,
-                mode: str = 'tensor'):
-        if mode == 'loss':
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+        data_samples: Optional[List] = None,
+        mode: str = "tensor",
+    ):
+        if mode == "loss":
             return self.loss(inputs, data_samples)
-        elif mode == 'predict':
+        elif mode == "predict":
             return self.predict(inputs, data_samples)
-        elif mode == 'tensor':
+        elif mode == "tensor":
             return self._forward(inputs, data_samples)
         else:
-            raise ValueError(f'Invalid mode {mode}')
+            raise ValueError(f"Invalid mode {mode}")
 
-    def _forward(self,
-                 inputs: Dict[str, torch.Tensor],
-                 data_samples: Optional[List] = None):
+    def _forward(
+        self, inputs: Dict[str, torch.Tensor], data_samples: Optional[List] = None
+    ):
         feats = self.extract_feat(inputs)
         outputs = self.head(feats, data_samples)
         return outputs
@@ -56,25 +58,25 @@ class MmKeypoints(BaseModel):
             self.head._last_points_count = points_counts
 
         outputs = self._forward(inputs, data_samples)
-        # print('succeed in this loop')
-        return {k: v for k, v in outputs.items() if k.startswith('loss')}
+
+        return {k: v for k, v in outputs.items() if k.startswith("loss")}
 
     def _get_points_count_from_samples(self, data_samples: List):
         if not data_samples:
             return None
         counts = []
         for sample in data_samples:
-            metainfo = getattr(sample, 'metainfo', None)
+            metainfo = getattr(sample, "metainfo", None)
             if metainfo is None:
                 counts.append(None)
                 continue
-            counts.append(metainfo.get('points_count_after_temporal_filter', None))
+            counts.append(metainfo.get("points_count_after_temporal_filter", None))
         if all(c is None for c in counts):
             return None
         return [int(c or 0) for c in counts]
 
     def _compute_points_count(self, inputs: Dict[str, torch.Tensor]):
-        points = inputs.get('points', None)
+        points = inputs.get("points", None)
         if points is None:
             return None
 
@@ -95,18 +97,19 @@ class MmKeypoints(BaseModel):
             return [count_points(sample_points) for sample_points in points]
         return None
 
-    def predict(self,
-                inputs: Dict[str, torch.Tensor],
-                data_samples: Optional[List] = None) -> List[BaseDataElement]:
+    def predict(
+        self, inputs: Dict[str, torch.Tensor], data_samples: Optional[List] = None
+    ) -> List[BaseDataElement]:
         with torch.no_grad():
             outputs = self._forward(inputs, data_samples)
-        keypoints = outputs.get('keypoints', None)
-        heatmap_keypoints = outputs.get('heatmap_keypoints', None)
-        scores = outputs.get('scores', None)
-        person_scores = outputs.get('person_scores', None)
-        heatmaps = outputs.get('heatmaps', None)
-        elevation_maps = outputs.get('elevation_maps', None)
-        ik_keypoints = outputs.get('ik_keypoints', None)
+        keypoints = outputs.get("keypoints", None)
+        heatmap_keypoints = outputs.get("heatmap_keypoints", None)
+        scores = outputs.get("scores", None)
+        person_scores = outputs.get("person_scores", None)
+        heatmaps = outputs.get("heatmaps", None)
+        elevation_maps = outputs.get("elevation_maps", None)
+        re_heatmaps = outputs.get("re_heatmaps", None)
+        ik_keypoints = outputs.get("ik_keypoints", None)
         batch = 0
         if heatmap_keypoints is not None:
             batch = heatmap_keypoints.size(0)
@@ -141,10 +144,10 @@ class MmKeypoints(BaseModel):
                 pred_samples[idx].ik_keypoints = ik_keypoints[idx]
             if scores is not None:
                 pred_samples[idx].scores = scores[idx]
-                pred_samples[idx].pred_scores = scores[idx]  # For evaluation metric
+                pred_samples[idx].pred_scores = scores[idx]
             if person_scores is not None:
                 pred_samples[idx].person_scores = torch.sigmoid(person_scores[idx])
-            # Set heatmaps and elevation maps for HeatmapMPJPE evaluator
+
             if heatmaps is not None:
                 pred_samples[idx].pred_heatmaps = heatmaps[idx]
                 pred_samples[idx].heatmaps = heatmaps[idx]
@@ -152,11 +155,11 @@ class MmKeypoints(BaseModel):
                 pred_samples[idx].pred_elevation_maps = elevation_maps[idx]
                 pred_samples[idx].elevation_maps = elevation_maps[idx]
 
-        loss_items = {
-            k: v
-            for k, v in outputs.items()
-            if k.startswith('loss')
-        }
+            if re_heatmaps is not None:
+                pred_samples[idx].pred_re_heatmaps = re_heatmaps[idx]
+                pred_samples[idx].re_heatmaps = re_heatmaps[idx]
+
+        loss_items = {k: v for k, v in outputs.items() if k.startswith("loss")}
         if loss_items:
             loss_sample = BaseDataElement()
             loss_sample.loss = loss_items
