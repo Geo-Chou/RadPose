@@ -4,14 +4,23 @@
 >
 > Department of Computer Science Engineering, Michigan State University
 
-**This is the official implementation of RadPose. This work has been submitted for publication; please check for potential conflicts of interest.**
+<p align="center">
+  <a href="#-model-zoo--checkpoints"><img src="https://img.shields.io/badge/%20Models%20%26%20Weights-Checkpoints-blue?style=for-the-badge" alt="Checkpoints"></a>
+  <a href="#-dataset-preparation"><img src="https://img.shields.io/badge/📂%20Datasets-Download-success?style=for-the-badge" alt="Datasets"></a>
+  <a href="#-getting-started"><img src="https://img.shields.io/badge/📄%20Paper-arXiv-red?style=for-the-badge" alt="Paper"></a>
+</p>
+
+**Dataset and Checkpoints will be released ASAP.**
+
 
 ## Demo
 <p align="center">
-  <video src="./demo/demo_anonymous.mp4" width="720px" controls>
+  <video src="./demo/Demo_RadPose_anonymous.mp4" width="720px" controls>
     您的浏览器不支持 video 标签。
   </video>
 </p>
+
+
 
 ## Introduction
 Human skeleton estimation under adverse lighting and occlusion conditions remains challenging for camera- and LiDAR-based systems. Although mmWave radars provide robustness to illumination and occlusion, they rely on dedicated hardware and licensed spectrum, limiting scalability.
