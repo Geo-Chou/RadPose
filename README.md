@@ -1,14 +1,15 @@
 # RadPose: 3D Human Skeleton Estimation with an Integrated Sensing-and-Communication Device
 
-> Geo Jie Zhou, Kunzhe Song, Ruxin Lin, Huacheng Zeng
->
-> Department of Computer Science Engineering, Michigan State University
-
 <p align="center">
   <a href="#-model-zoo--checkpoints"><img src="https://img.shields.io/badge/%20Models%20%26%20Weights-Checkpoints-blue?style=for-the-badge" alt="Checkpoints"></a>
   <a href="#-dataset-preparation"><img src="https://img.shields.io/badge/📂%20Datasets-Download-success?style=for-the-badge" alt="Datasets"></a>
   <a href="#-getting-started"><img src="https://img.shields.io/badge/📄%20Paper-arXiv-red?style=for-the-badge" alt="Paper"></a>
 </p>
+
+
+> Geo Jie Zhou, Kunzhe Song, Ruxin Lin, Huacheng Zeng
+>
+> Department of Computer Science Engineering, Michigan State University
 
 **Dataset and Checkpoints will be released ASAP.**
 
