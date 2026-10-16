@@ -11,16 +11,11 @@
 >
 > Department of Computer Science Engineering, Michigan State University
 
-**Dataset and Checkpoints will be released ASAP.**
+**This work as been accepted to WACV 2027. Dataset and Checkpoints will be released ASAP.**
 
 
 ## Demo
-<p align="center">
-  <video src="./demo/Demo_RadPose_anonymous.mp4" width="720px" controls>
-    您的浏览器不支持 video 标签。
-  </video>
-</p>
-
+![Demo video](./demo/Demo_RadPose_anonymous.gif)
 
 
 ## Introduction
@@ -91,3 +86,6 @@ Thanks a lot to these excellent projects:
 [mmengine](https://github.com/open-mmlab/mmengine)
 
 [mmcv](https://github.com/open-mmlab/mmcv)
+
+
+## Citation
