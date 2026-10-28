@@ -11,7 +11,7 @@
 >
 > Department of Computer Science Engineering, Michigan State University
 
-**This work as been accepted to WACV 2027.**
+**This work has been accepted to WACV 2027.**
 
 
 ## Demo
