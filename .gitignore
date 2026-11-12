@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.env
+.ruff_cache/
+.vscode/
+data/
+work_dirs/
+build/
+dist/
+*.egg-info/
+checkpoints/
